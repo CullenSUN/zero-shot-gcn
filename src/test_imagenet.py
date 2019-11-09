@@ -14,7 +14,7 @@ def test_imagenet_zero(fc_file_pred, has_train=1):
         classids = json.load(fp)
 
     with open(word2vec_file, 'rb') as fp:
-        word2vec_feat = pkl.load(fp, encoding='latin1')
+        word2vec_feat = pkl.load(fp)
 
     testlist = []
     testlabels = []

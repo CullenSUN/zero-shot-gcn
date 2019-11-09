@@ -73,7 +73,7 @@ def init(model_path, sess):
     for v in my_var_list:
         name = v.name.split(':')[0]
         my_dict[name] = 0
-        if name not in var_keep_dic:
+        if not var_keep_dic.has_key(name):
             print('He does not have', name)
         else:
             if v.shape != var_keep_dic[name]:
@@ -81,8 +81,8 @@ def init(model_path, sess):
                 continue
             variables_to_restore.append(v)
     for name in var_keep_dic:
-        if name not in my_dict:
-            print('I do not have', name)
+        if not my_dict.has_key(name):
+            print('I do not have ', name)
     restorer = tf.train.Saver(variables_to_restore)
     restorer.restore(sess, model_path)
     print('Initialized')
