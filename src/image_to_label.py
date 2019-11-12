@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import cv2
 import tensorflow as tf
@@ -6,6 +7,7 @@ import tensorflow.contrib.slim as slim
 
 from tensorflow.contrib.slim import arg_scope
 from tensorflow.contrib.slim.python.slim.nets import resnet_v1
+import pickle as pkl
 
 def init(model_path, sess):
 	def get_variables_in_checkpoint_file(file_name):
@@ -29,40 +31,99 @@ def init(model_path, sess):
 				print('Does not match shape: ', v.shape, var_keep_dic[name])
 				continue
 			variables_to_restore.append(v)
-	# for name in var_keep_dic:
-	# 	if not my_dict.has_key(name):
-	# 		print('I do not have ', name)
+
 	restorer = tf.compat.v1.train.Saver(variables_to_restore)
 	restorer.restore(sess, model_path)
 	print('Initialized')
 
-def image_to_feature(image_file):
+def image_to_labels(image_path):
 	# mageNet preatrained CNN (resnet 50)
 	model_path = '../pretrain_weights/resnet_v1_50.ckpt'
-	image_directory = '../demo_images/'
-	feature_directory = '../demo_feats/'
 
 	# key to put this here to init global variables
 	pool5, image_holder = res50()
 
 	tfconfig = tf.compat.v1.ConfigProto(allow_soft_placement=True)
 	tfconfig.gpu_options.allow_growth = True
-	sess = tf.compat.v1.Session(config=tfconfig)
-	init(model_path, sess)
+	session = tf.compat.v1.Session(config=tfconfig)
+	init(model_path, session)
 
-	image_path = os.path.join(image_directory, image_file)
 	image = preprocess_res50(image_path)
 	if image is None:
 		print('Image doesn\'t exist')
-		return
+		return None
 
-	feature = run_feat(sess, pool5, image_holder, image)
-	feature_path = os.path.join(feature_directory, image_file.split('.')[0] + '.npz')
-	np.savez_compressed(feature_path, feat=feature)
+	# key step
+	feature = run_feat(session, pool5, image_holder, image)
 
-def getTop10Labels():
-	return None
+	topK = 5
+	classifiers, labels = get_classifiers_with_labels()
+	classifiers = classifiers.T
 
+	scores = np.dot(feature, classifiers).squeeze()
+	scores = scores - scores.max()
+	scores = np.exp(scores)
+	scores = scores / scores.sum()
+	print("scores.shape", scores.shape)
+
+	ids = np.argsort(-scores)
+	topK_labels = []
+	for sort_id in range(topK):
+		lbl = labels[ids[sort_id]]
+		topK_labels.append(lbl)
+	return topK_labels
+
+def get_classifiers_with_labels():
+	fc_model_path = '../model/wordnet_resnet_glove_feat_2048_1024_512_300'
+	word2vec_path = '../data/word_embedding_model/glove_word2vec_wordnet.pkl'
+	class_ids_path = '../data/list/corresp-2-hops.json'
+	class_text_path = '../data/list/invdict_wordntext.json'
+
+	feature_dimension = 2048
+
+	with open(word2vec_path, 'rb') as fp:
+		word2vec_feat = pkl.load(fp)
+
+	with open(fc_model_path, 'rb') as fp:
+		fc_layers_pred = pkl.load(fp)
+	fc_layers_pred = np.array(fc_layers_pred)
+	print('fc output', fc_layers_pred.shape)
+
+	with open(class_ids_path) as fp:
+		class_ids = json.load(fp)
+	
+	with open(class_text_path) as fp:
+		class_names = json.load(fp)
+
+	# process 'train' classes. they are possible candidates during inference
+	cnt_zero_wv = 0
+	labels_train, word2vec_train = [], []
+	fc_now = []
+	for j in range(len(class_ids)):
+		tfc = fc_layers_pred[j]
+
+		if class_ids[j][1] == 0:
+			continue
+
+		if class_ids[j][0] >= 0:
+			twv = word2vec_feat[j]
+			if np.linalg.norm(twv) == 0:
+				cnt_zero_wv = cnt_zero_wv + 1
+				continue
+			class_name = class_names[class_ids[j][0]]
+			labels_train.append(class_name)
+			word2vec_train.append(twv)
+
+			feature_len = len(tfc)
+			tfc = tfc[feature_len - feature_dimension: feature_len]
+			fc_now.append(tfc)
+
+	fc_now = np.array(fc_now)
+	labels = np.array(labels_train)
+
+	print('skip candidate class due to no word embedding: %d / %d:' % (cnt_zero_wv, len(labels_train) + cnt_zero_wv))
+	print('candidate class shape: ', fc_now.shape)
+	return fc_now, labels
 
 def preprocess_res50(image_path):
 	_R_MEAN = 123.68
@@ -90,8 +151,8 @@ def preprocess_res50(image_path):
 	image = image[np.newaxis, :, :, :]
 	return image
 
-def run_feat(sess, pool5, image_holder, image):
-	feat = sess.run(pool5, feed_dict={image_holder: image})
+def run_feat(session, pool5, image_holder, image):
+	feat = session.run(pool5, feed_dict={image_holder: image})
 	feat = np.squeeze(feat)
 	return feat
 
@@ -125,4 +186,8 @@ def resnet_arg_scope(is_training=True,
 
 if __name__ == '__main__':
 	# os.environ['CUDA_VISIBLE_DEVICES'] = '0' gpu unit
-	image_to_feature("n02112497_47.JPEG")
+	image_path = '../demo_images/tiger.PNG'
+	predicted_labels = image_to_labels(image_path)
+	print("predicted_labels: ")
+	print("\n".join(predicted_labels))
+
