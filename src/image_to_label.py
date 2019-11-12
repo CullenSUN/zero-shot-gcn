@@ -38,7 +38,7 @@ def init(model_path, sess):
 	print('Initialized')
 
 def image_to_labels(image_path):
-	# mageNet preatrained CNN (resnet 50)
+	# imageNet preatrained CNN (resnet 50)
 	model_path = '../pretrain_weights/resnet_v1_50.ckpt'
 
 	# key to put this here to init global variables
@@ -68,11 +68,11 @@ def image_to_labels(image_path):
 	print("scores.shape", scores.shape)
 
 	ids = np.argsort(-scores)
-	topK_labels = []
+	topK_label_ids = []
 	for sort_id in range(topK):
 		lbl = labels[ids[sort_id]]
-		topK_labels.append(str(lbl))
-	return topK_labels
+		topK_label_ids.append(lbl)
+	return getNames(topK_label_ids)
 
 def get_classifiers_with_labels():
 	fc_model_path = '../model/wordnet_resnet_glove_feat_2048_1024_512_300'
@@ -127,6 +127,26 @@ def get_classifiers_with_labels():
 	print('skip candidate class due to no word embedding: %d / %d:' % (cnt_zero_wv, len(labels_train) + cnt_zero_wv))
 	print('candidate class shape: ', fc_now.shape)
 	return fc_now, labels
+
+def getNames(label_indices):
+	file_2_hops_path = '../data/list/2-hops.txt' 
+	dict_path = '../data/list/words.pkl'
+
+	wnids = []
+	with open(file_2_hops_path) as fp:
+		for line in fp:
+			wnids.append(line.strip())
+	
+	with open(dict_path) as fp:
+		wnid_word = pkl.load(fp)
+
+	names = []
+	for i in range(len(label_indices)):
+		# -1000 is to offset 1K trained data set. Checkout make_corresp in prepare_list.py
+		wnid_index = label_indices[i] - 1000
+		wnid = wnids[wnid_index]
+		names.append(wnid_word[wnid])
+	return names
 
 def preprocess_res50(image_path):
 	_R_MEAN = 123.68
@@ -188,6 +208,7 @@ def resnet_arg_scope(is_training=True,
 			return arg_sc
 
 if __name__ == '__main__':
+	
 	# os.environ['CUDA_VISIBLE_DEVICES'] = '0' gpu unit
 	parser = argparse.ArgumentParser(description='Process Inputs.')
 	parser.add_argument('--image', type=str, default='../demo_images/tiger.PNG', help='path of iamge to classify')
