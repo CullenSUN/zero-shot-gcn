@@ -1,13 +1,14 @@
 import os
 import json
-import numpy as np
+import argparse
 import cv2
+import numpy as np
+import pickle as pkl
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
 from tensorflow.contrib.slim import arg_scope
 from tensorflow.contrib.slim.python.slim.nets import resnet_v1
-import pickle as pkl
 
 def init(model_path, sess):
 	def get_variables_in_checkpoint_file(file_name):
@@ -56,7 +57,7 @@ def image_to_labels(image_path):
 	# key step
 	feature = run_feat(session, pool5, image_holder, image)
 
-	topK = 5
+	topK = 10
 	classifiers, labels = get_classifiers_with_labels()
 	classifiers = classifiers.T
 
@@ -70,7 +71,7 @@ def image_to_labels(image_path):
 	topK_labels = []
 	for sort_id in range(topK):
 		lbl = labels[ids[sort_id]]
-		topK_labels.append(lbl)
+		topK_labels.append(str(lbl))
 	return topK_labels
 
 def get_classifiers_with_labels():
@@ -110,8 +111,10 @@ def get_classifiers_with_labels():
 			if np.linalg.norm(twv) == 0:
 				cnt_zero_wv = cnt_zero_wv + 1
 				continue
+				
+			# todo: use class_name to append to labels_train
 			class_name = class_names[class_ids[j][0]]
-			labels_train.append(class_name)
+			labels_train.append(class_ids[j][0])
 			word2vec_train.append(twv)
 
 			feature_len = len(tfc)
@@ -186,8 +189,16 @@ def resnet_arg_scope(is_training=True,
 
 if __name__ == '__main__':
 	# os.environ['CUDA_VISIBLE_DEVICES'] = '0' gpu unit
-	image_path = '../demo_images/tiger.PNG'
-	predicted_labels = image_to_labels(image_path)
+	parser = argparse.ArgumentParser(description='Process Inputs.')
+	parser.add_argument('--image', type=str, default='../demo_images/tiger.PNG', help='path of iamge to classify')
+
+	args = parser.parse_args()
+	if not os.path.exists(args.image):
+		print('image does not exist: %s' % args.image)
+		raise NotImplementedError
+
+	print("processing image at %s" % args.image)
+	predicted_labels = image_to_labels(args.image)
 	print("predicted_labels: ")
 	print("\n".join(predicted_labels))
 
