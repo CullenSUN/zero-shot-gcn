@@ -37,7 +37,7 @@ def init(model_path, sess):
 	restorer.restore(sess, model_path)
 	print('Initialized')
 
-def image_to_labels(image_path):
+def image_to_labels(image_path, topK=10):
 	# imageNet preatrained CNN (resnet 50)
 	model_path = '../pretrain_weights/resnet_v1_50.ckpt'
 
@@ -57,7 +57,6 @@ def image_to_labels(image_path):
 	# key step
 	feature = run_feat(session, pool5, image_holder, image)
 
-	topK = 10
 	classifiers, labels = get_classifiers_with_labels()
 	classifiers = classifiers.T
 
@@ -219,7 +218,7 @@ if __name__ == '__main__':
 		raise NotImplementedError
 
 	print("processing image at %s" % args.image)
-	predicted_labels = image_to_labels(args.image)
+	predicted_labels = image_to_labels(args.image, 5)
 	print("predicted_labels: ")
 	print("\n".join(predicted_labels))
 
